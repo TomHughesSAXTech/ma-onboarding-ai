@@ -15,7 +15,7 @@
     "rewrite": "/index.html"
   },
   "platform": {
-    "apiRuntime": "node:18"
+    "apiRuntime": "node:20"
   },
   "globalHeaders": {
     "content-security-policy": "default-src https: 'unsafe-inline' 'unsafe-eval'; img-src https: data: blob:; connect-src https: wss: http://localhost:* ws://localhost:*"
