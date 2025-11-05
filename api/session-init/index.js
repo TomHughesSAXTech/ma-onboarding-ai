@@ -1,4 +1,3 @@
-const { app } = require('@azure/functions');
 const { CosmosClient } = require('@azure/cosmos');
 const { v4: uuidv4 } = require('uuid');
 
@@ -8,36 +7,32 @@ const cosmosClient = new CosmosClient({ endpoint: cosmosEndpoint, key: cosmosKey
 const database = cosmosClient.database('MAOnboarding');
 const container = database.container('Sessions');
 
-app.http('session-init', {
-    methods: ['POST'],
-    authLevel: 'anonymous',
-    handler: async (request, context) => {
-        try {
-            const body = await request.json();
-            const sessionId = uuidv4();
-            
-            const sessionData = {
-                id: sessionId,
-                sessionId,
-                type: body.type || 'ma-onboarding',
-                createdAt: new Date().toISOString(),
-                discoveryData: {},
-                messages: [],
-                status: 'active'
-            };
+module.exports = async function (context, req) {
+    try {
+        const body = req.body;
+        const sessionId = uuidv4();
+        
+        const sessionData = {
+            id: sessionId,
+            sessionId,
+            type: body.type || 'ma-onboarding',
+            createdAt: new Date().toISOString(),
+            discoveryData: {},
+            messages: [],
+            status: 'active'
+        };
 
-            await container.items.create(sessionData);
-
-            return {
-                status: 200,
-                jsonBody: { sessionId }
-            };
-        } catch (error) {
-            context.log('Error initializing session:', error);
-            return {
-                status: 500,
-                jsonBody: { error: 'Failed to initialize session' }
-            };
-        }
+        await container.items.create(sessionData);
+        
+        context.res = {
+            status: 200,
+            body: { sessionId }
+        };
+    } catch (error) {
+        context.log.error('Error initializing session:', error);
+        context.res = {
+            status: 500,
+            body: { error: 'Failed to initialize session' }
+        };
     }
-});
+};
