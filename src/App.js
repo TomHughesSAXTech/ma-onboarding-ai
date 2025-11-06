@@ -66,10 +66,9 @@ function App() {
 
   const initializeSession = async () => {
     try {
-      const response = await fetch('/api/session-init', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'ma-onboarding' })
+      const response = await fetch('https://maonboarding-functions.azurewebsites.net/api/session-init', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       });
       const data = await response.json();
       setSessionId(data.sessionId);

@@ -1,20 +1,52 @@
-const { app } = require('@azure/functions');
+const { CosmosClient } = require('@azure/cosmos');
+const { v4: uuidv4 } = require('uuid');
 
-// V4 format - function name becomes the route: /api/session-init
-app.http('session-init', {
-    methods: ['POST'],
-    authLevel: 'anonymous',
-    handler: async (request, context) => {
-        context.log('session-init called');
+module.exports = async function (context, req) {
+    context.log('Session init started');
+    
+    try {
+        const cosmosEndpoint = process.env.COSMOS_ENDPOINT;
+        const cosmosKey = process.env.COSMOS_KEY;
         
-        const sessionId = 'test-' + Date.now();
+        if (!cosmosEndpoint || !cosmosKey) {
+            context.res = {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Cosmos DB configuration missing' })
+            };
+            return;
+        }
         
-        return {
-            jsonBody: { 
-                sessionId,
-                message: 'Test response v4' 
-            }
+        const cosmosClient = new CosmosClient({ endpoint: cosmosEndpoint, key: cosmosKey });
+        const database = cosmosClient.database('MAOnboarding');
+        const container = database.container('Sessions');
+        
+        const type = (req.body && req.body.type) || (req.query && req.query.type) || 'ma-onboarding';
+        const sessionId = uuidv4();
+        
+        const sessionData = {
+            id: sessionId,
+            sessionId,
+            type,
+            createdAt: new Date().toISOString(),
+            discoveryData: {},
+            messages: [],
+            status: 'active'
+        };
+
+        await container.items.create(sessionData);
+        
+        context.res = {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId })
+        };
+    } catch (error) {
+        context.log.error('Error initializing session:', error.message);
+        context.res = {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'Failed to initialize session', details: error.message })
         };
     }
-});
 };
