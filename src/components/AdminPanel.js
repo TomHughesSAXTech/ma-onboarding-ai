@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, Plus, Trash2, Save, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Plus, Trash2, Save, RefreshCw, Download, Upload } from 'lucide-react';
 import './AdminPanel.css';
 
 const AdminPanel = () => {
@@ -7,6 +7,7 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('categories');
+  const importInputRef = useRef(null);
 
   useEffect(() => {
     loadConfig();
@@ -90,6 +91,38 @@ const AdminPanel = () => {
     }
   };
 
+  const exportConfig = () => {
+    const payload = { config };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ma-discovery-config-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const onImportChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const json = JSON.parse(reader.result);
+        const imported = json.config || json;
+        if (!imported || !imported.categories) throw new Error('Invalid format');
+        setConfig(imported);
+        alert('Configuration imported. Click Save to persist.');
+      } catch (err) {
+        console.error('Import error:', err);
+        alert('Invalid configuration file');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const addCategory = () => {
     setConfig({
       ...config,
@@ -166,10 +199,25 @@ const AdminPanel = () => {
       <div className="admin-header">
         <Settings size={32} />
         <h1>M&A Discovery Admin Panel</h1>
-        <button className="btn-save" onClick={saveConfig} disabled={saving}>
-          <Save size={20} />
-          {saving ? 'Saving...' : 'Save All Changes'}
-        </button>
+        <div className="header-actions">
+          <button className="btn-secondary" onClick={exportConfig}>
+            <Download size={18} /> Export JSON
+          </button>
+          <button className="btn-secondary" onClick={() => importInputRef.current?.click()}>
+            <Upload size={18} /> Import JSON
+          </button>
+          <input
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            ref={importInputRef}
+            onChange={onImportChange}
+          />
+          <button className="btn-save" onClick={saveConfig} disabled={saving}>
+            <Save size={20} />
+            {saving ? 'Saving...' : 'Save All Changes'}
+          </button>
+        </div>
       </div>
 
       <div className="admin-tabs">
