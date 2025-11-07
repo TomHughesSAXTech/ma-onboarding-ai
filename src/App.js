@@ -65,12 +65,14 @@ function App() {
   }, []);
 
   const initializeSession = async () => {
+    console.log('[DEBUG] Initializing session...');
     try {
       const response = await fetch('https://maonboarding-functions.azurewebsites.net/api/session-init', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
       const data = await response.json();
+      console.log('[DEBUG] Session initialized:', data.sessionId);
       setSessionId(data.sessionId);
       
       // Set initial root node
