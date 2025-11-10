@@ -1,5 +1,10 @@
 const { CosmosClient } = require('@azure/cosmos');
-const { BlobServiceClient } = require('@azure/storage-blob');
+let BlobServiceClient;
+try {
+  ({ BlobServiceClient } = require('@azure/storage-blob'));
+} catch (e) {
+  // storage SDK not available locally; backup step will be skipped
+}
 
 const cosmosEndpoint = process.env.COSMOS_ENDPOINT;
 const cosmosKey = process.env.COSMOS_KEY;
@@ -8,10 +13,31 @@ const client = new CosmosClient({ endpoint: cosmosEndpoint, key: cosmosKey });
 const database = client.database('MAOnboarding');
 const container = database.container('Configurations');
 
+async function backupToBlob(context, configDoc) {
+  try {
+    const conn = process.env.STORAGE_CONNECTION || process.env.AZURE_STORAGE_CONNECTION_STRING;
+    if (!BlobServiceClient || !conn) {
+      context.log('[config-set] Storage backup skipped (no SDK or connection string)');
+      return;
+    }
+    const service = BlobServiceClient.fromConnectionString(conn);
+    const containerClient = service.getContainerClient('config-backups');
+    try { await containerClient.createIfNotExists({ access: 'container' }); } catch {}
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const blobName = `${ts}-discovery_config.json`;
+    const blobClient = containerClient.getBlockBlobClient(blobName);
+    const body = JSON.stringify(configDoc, null, 2);
+    await blobClient.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+    context.log(`[config-set] Backup written to blob ${blobName}`);
+  } catch (err) {
+    context.log.warn('[config-set] Backup to blob failed:', err.message);
+  }
+}
+
 module.exports = async function (context, req) {
   context.log('Saving configuration to Cosmos DB');
 
-  const { config } = req.body || {};
+  const { config } = req.body;
 
   if (!config) {
     context.res = {
@@ -42,33 +68,8 @@ module.exports = async function (context, req) {
     // Upsert configuration (create or update)
     await container.items.upsert(configDoc);
 
-    // Attempt blob backup if configured
-    try {
-      const connectionString = process.env.STORAGE_CONNECTION;
-      if (connectionString) {
-        const blobService = BlobServiceClient.fromConnectionString(connectionString);
-        const containerName = process.env.CONFIG_BACKUP_CONTAINER || 'config-backups';
-        const backups = blobService.getContainerClient(containerName);
-        // Ensure container exists (no-op if already exists)
-        try {
-          await backups.createIfNotExists();
-        } catch (e) {
-          // ignore create race
-        }
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        const blobName = `discovery_config-${ts}.json`;
-        const blob = backups.getBlockBlobClient(blobName);
-        const payload = Buffer.from(JSON.stringify(configDoc, null, 2));
-        await blob.upload(payload, payload.length, {
-          blobHTTPHeaders: { blobContentType: 'application/json' }
-        });
-        context.log(`Backup written to blob: ${containerName}/${blobName}`);
-      } else {
-        context.log('STORAGE_CONNECTION not set; skipping blob backup');
-      }
-    } catch (backupErr) {
-      context.log.warn('Backup upload failed:', backupErr.message || backupErr);
-    }
+    // best-effort backup to blob storage
+    await backupToBlob(context, configDoc);
 
     context.res = {
       status: 200,
