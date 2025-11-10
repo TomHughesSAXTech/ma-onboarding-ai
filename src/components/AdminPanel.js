@@ -17,7 +17,27 @@ const AdminPanel = () => {
     try {
       const response = await fetch('https://maonboarding-functions.azurewebsites.net/api/config-get');
       const data = await response.json();
-      setConfig(data.config || getDefaultConfig());
+      const loadedConfig = data.config || getDefaultConfig();
+      
+      // Normalize categories to ensure all required fields exist
+      if (loadedConfig.categories) {
+        loadedConfig.categories = loadedConfig.categories.map(cat => ({
+          id: cat.id || `category_${Date.now()}`,
+          name: cat.name || cat.label || 'Unnamed Category',
+          description: cat.description || '',
+          questions: cat.questions || [],
+          extractionPrompt: cat.extractionPrompt || '',
+          completionCriteria: cat.completionCriteria || { minFacts: 1, requiredFields: [] },
+          quickActions: cat.quickActions || []
+        }));
+      }
+      
+      // Ensure globalSettings exists
+      if (!loadedConfig.globalSettings) {
+        loadedConfig.globalSettings = getDefaultConfig().globalSettings;
+      }
+      
+      setConfig(loadedConfig);
     } catch (error) {
       console.error('Error loading config:', error);
       setConfig(getDefaultConfig());
