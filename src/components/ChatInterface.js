@@ -8,6 +8,7 @@ const ChatInterface = ({ sessionId, onDiscoveryUpdate, currentPhase }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(null);
   const [config, setConfig] = useState(null);
+  const [askedQuestions, setAskedQuestions] = useState([]);
   const messagesEndRef = useRef(null);
 
   // Default questions (fallback if config not available)
@@ -111,13 +112,28 @@ const ChatInterface = ({ sessionId, onDiscoveryUpdate, currentPhase }) => {
     const questions = categoryConfig?.questions || defaultDiscoveryQuestions[currentCategory] || [];
     
     if (questions && questions.length > 0) {
-      const nextQuestion = questions[0]; // In production, track which questions have been asked
-      addMessage({
-        role: 'assistant',
-        content: nextQuestion,
-        category: currentCategory,
-        timestamp: new Date().toISOString()
-      });
+      // Find next unasked question
+      const categoryKey = currentCategory;
+      const alreadyAsked = askedQuestions.filter(q => q.category === categoryKey).length;
+      
+      if (alreadyAsked < questions.length) {
+        const nextQuestion = questions[alreadyAsked];
+        setAskedQuestions(prev => [...prev, { category: categoryKey, question: nextQuestion }]);
+        addMessage({
+          role: 'assistant',
+          content: nextQuestion,
+          category: currentCategory,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // All questions asked, prompt for completion or next topic
+        addMessage({
+          role: 'assistant',
+          content: `We've covered all the ${categoryConfig?.name || currentCategory} questions. Is there anything else you'd like to add, or should we move on? (Type 'next' to continue)`,
+          category: currentCategory,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   };
 
@@ -160,6 +176,13 @@ const ChatInterface = ({ sessionId, onDiscoveryUpdate, currentPhase }) => {
       if (data.discoveryData) {
         onDiscoveryUpdate(currentCategory, data.discoveryData);
       }
+      
+      // Ask next question if available (after user responds)
+      if (!data.categoryComplete) {
+        setTimeout(() => {
+          askNextQuestion();
+        }, 500);
+      }
 
       // Check if we should move to next category
       if (data.categoryComplete) {
@@ -171,6 +194,7 @@ const ChatInterface = ({ sessionId, onDiscoveryUpdate, currentPhase }) => {
           const nextCatConfig = config?.config?.categories?.find(c => c.id === nextCatId);
           const nextCatName = nextCatConfig?.name || nextCatId;
           setCurrentCategory(nextCatId);
+          // Question tracking will automatically reset since we're checking current category
           setTimeout(() => {
             addMessage({
               role: 'assistant',
